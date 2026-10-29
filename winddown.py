@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import os
 import re
+import shlex
 import shutil
 import signal
 import subprocess
@@ -256,10 +257,9 @@ def cmd_resume(quiet=False):
 
 
 def cmd_install_hook():
-    script = os.path.abspath(sys.argv[0])
-    on_path = shutil.which("winddown")
-    command = "winddown check" if on_path and os.path.samefile(on_path, script) \
-        else "python3 %s check" % script
+    # Absolute path: hooks run without your shell profile, so PATH can't be trusted.
+    script = os.path.realpath(sys.argv[0])
+    command = "python3 %s check" % shlex.quote(script)
     settings = {}
     if os.path.exists(SETTINGS_FILE):
         try:

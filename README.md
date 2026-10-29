@@ -4,6 +4,35 @@ AI makes each task faster, so we take on more, and the breaks and evenings disap
 
 One command closes the day: your work is stashed safely, tomorrow's first three steps are written down, and Claude Code stays paused until morning.
 
+It's the **"A shutdown command"** idea from the hackathon brief: one command that saves your open work, writes tomorrow's list and pauses your agents until morning. It came out of Claude Conversations at Toast, Dublin, where the room named compression burnout as the problem to fix first.
+
+## What you see
+
+```
+$ winddown ~/code/api ~/code/web
+Closed 2 repos, stashed 2, tomorrow's list is in TOMORROW.md. You're done until 08:30.
+```
+
+`~/code/api/TOMORROW.md`:
+
+```markdown
+# Tomorrow
+
+**Where you stopped:** editing src/parser.py, tests/test_parser.py, stashed as "winddown 2026-10-29".
+
+1. Restore your work: `git stash pop` (src/parser.py, tests/test_parser.py)
+2. TODO: handle empty input in src/parser.py:42
+3. Continue from today's last commit: "add streaming parser"
+```
+
+If you open Claude Code later that evening and type a prompt, it's blocked:
+
+```
+Winddown active until 08:30. Rest. Run `winddown resume` to override.
+```
+
+At 08:30 the pause lifts by itself. You don't need to do anything.
+
 ## Quickstart
 
 ```bash
@@ -12,7 +41,11 @@ git clone https://github.com/<you>/winddown && cd winddown
 winddown ~/code/api ~/code/web   # at the end of the day (no args = current repo)
 ```
 
-Next morning the pause lifts by itself at 08:30. To start earlier: `winddown resume`.
+You need Python 3.8+ and git, on macOS or Linux. There's nothing else to install.
+
+Every evening after that, it's one command. In the morning, open `TOMORROW.md` and run `git stash pop`. To start earlier than 08:30: `winddown resume`. For a different morning: `winddown --until 09:15`.
+
+To uninstall: delete `~/.local/bin/winddown` and the `winddown check` entry under `UserPromptSubmit` in `~/.claude/settings.json` (a backup from before the install is at `settings.json.winddown.bak`).
 
 ## What it does and doesn't do
 
