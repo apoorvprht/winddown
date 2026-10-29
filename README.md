@@ -36,7 +36,7 @@ At 08:30 the pause lifts by itself. You don't need to do anything.
 ## Quickstart
 
 ```bash
-git clone https://github.com/<you>/winddown && cd winddown
+git clone <this repo URL> winddown && cd winddown
 ./install.sh                 # copies winddown to ~/.local/bin and adds the Claude Code hook
 winddown ~/code/api ~/code/web   # at the end of the day (no args = current repo)
 ```
