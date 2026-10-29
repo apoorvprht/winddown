@@ -8,6 +8,8 @@ It's the **"A shutdown command"** idea from the hackathon brief: one command tha
 
 ## What you see
 
+**[Watch the 65-second demo](demo/winddown-demo.mp4)**, made from a real run in sample repos (`demo/record.py` captures it, `demo/render.swift` renders it).
+
 ```
 $ winddown ~/code/api ~/code/web
 Closed 2 repos, stashed 2, tomorrow's list is in TOMORROW.md. You're done until 08:30.

@@ -1,0 +1,102 @@
+[
+  {
+    "kind": "title",
+    "title": "winddown",
+    "subtitle": "One command to end the developer day.",
+    "body": "For developers running several Claude Code sessions who find it hard to stop.\nAI makes each task faster, so we take on more, and the evenings go.",
+    "hold": 4.5
+  },
+  {
+    "kind": "scene",
+    "caption": "19:45. Two repos, both with unfinished work.",
+    "steps": [
+      {
+        "cmd": "git status --short",
+        "out": " M src/parser.py\n?? tests/"
+      },
+      {
+        "cmd": "git log --oneline --since=midnight",
+        "out": "f8c8ffe add streaming parser\n135791a add CSV parser"
+      }
+    ],
+    "hold": 2.5
+  },
+  {
+    "kind": "scene",
+    "caption": "One command closes the day.\n(--no-kill only so this recording does not stop the agent filming it.)",
+    "steps": [
+      {
+        "cmd": "winddown --no-kill ~/code/api ~/code/web",
+        "out": "Closed 2 repos, stashed 2, tomorrow's list is in TOMORROW.md. You're done until 08:30."
+      }
+    ],
+    "hold": 3
+  },
+  {
+    "kind": "scene",
+    "caption": "Your work is stashed safely. Commits are untouched.",
+    "steps": [
+      {
+        "cmd": "git status",
+        "out": "On branch main\nnothing to commit, working tree clean"
+      },
+      {
+        "cmd": "git stash list",
+        "out": "stash@{0}: On main: winddown 2026-10-29"
+      },
+      {
+        "cmd": "git log --oneline -1",
+        "out": "f8c8ffe add streaming parser"
+      }
+    ],
+    "hold": 2.5
+  },
+  {
+    "kind": "scene",
+    "caption": "Tomorrow's list: at most 3 items, built from your real diff and commits.",
+    "steps": [
+      {
+        "cmd": "cat TOMORROW.md",
+        "out": "# Tomorrow\n\n**Where you stopped:** editing src/parser.py, tests/test_parser.py, stashed as \"winddown 2026-10-29\".\n\n1. Restore your work: `git stash pop` (src/parser.py, tests/test_parser.py)\n2. FIXME: skips the last line in src/parser.py:6\n3. Continue from today's last commit: \"add streaming parser\""
+      }
+    ],
+    "hold": 4.5
+  },
+  {
+    "kind": "scene",
+    "caption": "22:10. You open Claude Code for \"just one more thing\".\nIts UserPromptSubmit hook runs winddown check:",
+    "steps": [
+      {
+        "cmd": "grep '\"command\"' ~/.claude/settings.json",
+        "out": "            \"type\": \"command\",\n            \"command\": \"python3 ~/.local/bin/winddown check\""
+      },
+      {
+        "cmd": "echo '{\"prompt\":\"one more fix\"}' | winddown check; echo \"exit code: $?\"",
+        "out": "Winddown active until 08:30. Rest. Run `winddown resume` to override.\nexit code: 2"
+      }
+    ],
+    "hold": 4
+  },
+  {
+    "kind": "scene",
+    "caption": "Exit code 2 means Claude Code blocks the prompt. The evening stays yours.\nNext morning the pause lifts at 08:30 by itself. Or, any time:",
+    "steps": [
+      {
+        "cmd": "winddown resume",
+        "out": "Pause cleared. Welcome back."
+      },
+      {
+        "cmd": "git stash pop -q && git status --short",
+        "out": " M src/parser.py\n?? tests/"
+      }
+    ],
+    "hold": 3.5
+  },
+  {
+    "kind": "title",
+    "title": "No alerts. No dashboards. No prompts.",
+    "subtitle": "It runs once, prints one line, and gives the evening back.",
+    "body": "github.com/apoorvprht/winddown",
+    "hold": 5
+  }
+]
