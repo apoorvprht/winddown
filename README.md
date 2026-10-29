@@ -20,9 +20,9 @@ Closed 2 repos, stashed 2, tomorrow's list is in TOMORROW.md. You're done until 
 ```markdown
 # Tomorrow
 
-**Where you stopped:** editing src/parser.py, tests/test_parser.py, stashed as "winddown 2026-10-29".
+**Where you stopped:** editing src/parser.py, tests/test_parser.py, stashed as "winddown 2026-10-29 19:45".
 
-1. Restore your work: `git stash pop` (src/parser.py, tests/test_parser.py)
+1. Restore your work: `git stash pop --index stash@{0}` (src/parser.py, tests/test_parser.py)
 2. TODO: handle empty input in src/parser.py:42
 3. Continue from today's last commit: "add streaming parser"
 ```
@@ -45,7 +45,7 @@ winddown ~/code/api ~/code/web   # at the end of the day (no args = current repo
 
 You need Python 3.8+ and git, on macOS or Linux. There's nothing else to install.
 
-Every evening after that, it's one command. In the morning, open `TOMORROW.md` and run `git stash pop`. To start earlier than 08:30: `winddown resume`. For a different morning: `winddown --until 09:15`.
+Every evening after that, it's one command. In the morning, open `TOMORROW.md` and run the restore command on item 1. To start earlier than 08:30: `winddown resume`. For a different morning: `winddown --until 09:15`.
 
 To uninstall: delete `~/.local/bin/winddown` and the `winddown check` entry under `UserPromptSubmit` in `~/.claude/settings.json` (a backup from before the install is at `settings.json.winddown.bak`).
 
@@ -53,7 +53,7 @@ To uninstall: delete `~/.local/bin/winddown` and the `winddown check` entry unde
 
 **Does**
 
-- In each repo with uncommitted changes, runs `git stash push -u -m "winddown <date>"`. Committed work and branches are never touched.
+- In each repo with uncommitted changes, runs `git stash push -u -m "winddown <date> <time>"`. Committed work and branches are never touched. Running it twice is safe: the list is rebuilt from the stash, and older winddown stashes you never restored are pointed out.
 - Writes `TOMORROW.md` in each repo: one "Where you stopped" line, then at most 3 items built from the stash, `TODO`/`FIXME` lines in today's uncommitted diff, and today's commits. The file is added to `.git/info/exclude`, so it never shows up as a change.
 - Writes `~/.winddown/pause.json` with a resume time (next 08:30, or `--until HH:MM`).
 - Sends SIGTERM to `claude` processes that have no terminal attached (leftover background agents). Its own process tree and any `claude` running in a terminal are left alone. Use `--no-kill` to skip this step.
@@ -63,8 +63,8 @@ To uninstall: delete `~/.local/bin/winddown` and the `winddown check` entry unde
 
 **Doesn't**
 
-- It doesn't commit, push, or pop stashes for you. In the morning, `git stash pop` is item 1 on the list.
-- It doesn't stash repos with no commits yet (git can't). It leaves those changes in place and says so.
+- It doesn't commit, push, or pop stashes for you. In the morning, item 1 on the list is the exact `git stash pop --index stash@{N}` command, which also keeps staged files staged.
+- It doesn't stash repos with no commits yet, or repos in the middle of a merge, rebase, cherry-pick or revert (stashing would fail or lose state). It leaves those changes in place, says so, and puts "finish the merge" on the list.
 - It doesn't block Claude Code sessions already mid-task. The hook stops new prompts. Background agents are only stopped if they have no terminal.
 - It doesn't send notifications, track time, or phone home. It runs locally, Python 3 standard library only.
 - The TOMORROW.md items are simple heuristics, not a summary written by an AI.
@@ -79,7 +79,8 @@ To uninstall: delete `~/.local/bin/winddown` and the `winddown check` entry unde
 ## Test
 
 ```bash
-bash tests/demo.sh
+bash tests/demo.sh        # the main flow, end to end
+bash tests/edge_cases.sh  # running twice, stacked stashes, staged files, merges, reinstalling
 ```
 
 The demo builds a real temp git repo, runs winddown, and checks the stash, TOMORROW.md, the pause file, `check` exiting 2, `resume` exiting 0, and the settings merge. It uses temp state dirs and `--no-kill`, so your real `~/.winddown` and `~/.claude/settings.json` are left alone.

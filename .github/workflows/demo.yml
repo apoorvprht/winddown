@@ -9,3 +9,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash tests/demo.sh
+      - run: bash tests/edge_cases.sh

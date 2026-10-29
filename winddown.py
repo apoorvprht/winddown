@@ -48,9 +48,24 @@ def changed_files(repo):
 
 def todos_in_diff(repo):
     """TODO/FIXME lines added in uncommitted changes, as (file, line, text)."""
-    found = []
     diff = git(repo, "diff", "HEAD", "-U0").stdout if has_head(repo) else \
         git(repo, "diff", "--cached", "-U0").stdout + git(repo, "diff", "-U0").stdout
+    found = todos_in_patch(diff)
+    untracked = git(repo, "ls-files", "--others", "--exclude-standard").stdout
+    for rel in untracked.splitlines():
+        try:
+            with open(os.path.join(repo, rel), encoding="utf-8") as fh:
+                for n, text in enumerate(fh, 1):
+                    m = TODO_RE.search(text)
+                    if m:
+                        found.append((rel, n, m.group(0).strip()))
+        except (OSError, UnicodeDecodeError):
+            continue
+    return found
+
+
+def todos_in_patch(diff):
+    found = []
     current, lineno = None, 0
     for line in diff.splitlines():
         if line.startswith("+++ "):
@@ -63,16 +78,36 @@ def todos_in_diff(repo):
             if m:
                 found.append((current, lineno, m.group(0).strip()))
             lineno += 1
-    untracked = git(repo, "ls-files", "--others", "--exclude-standard").stdout
-    for rel in untracked.splitlines():
-        try:
-            with open(os.path.join(repo, rel), encoding="utf-8") as fh:
-                for n, text in enumerate(fh, 1):
-                    m = TODO_RE.search(text)
-                    if m:
-                        found.append((rel, n, m.group(0).strip()))
-        except (OSError, UnicodeDecodeError):
-            continue
+    return found
+
+
+def operation_in_progress(repo):
+    """'merge', 'rebase', ... if git is mid-operation (stashing would fail)."""
+    for marker, name in (("MERGE_HEAD", "merge"), ("rebase-merge", "rebase"),
+                         ("rebase-apply", "rebase"), ("CHERRY_PICK_HEAD", "cherry-pick"),
+                         ("REVERT_HEAD", "revert")):
+        path = git(repo, "rev-parse", "--git-path", marker).stdout.strip()
+        if os.path.exists(path if os.path.isabs(path) else os.path.join(repo, path)):
+            return name
+    return None
+
+
+def stash_show(repo, ref, *args):
+    """`git stash show` including untracked files (git >= 2.32), else without."""
+    r = git(repo, "stash", "show", "--include-untracked", *args, ref)
+    return r.stdout if r.returncode == 0 else git(repo, "stash", "show", *args, ref).stdout
+
+
+def winddown_stashes(repo):
+    """Winddown stashes, newest first, as (ref, label, files)."""
+    out = git(repo, "stash", "list", "--format=%gd%x09%gs").stdout
+    found = []
+    for line in out.splitlines():
+        ref, _, subject = line.partition("\t")
+        m = re.search(r"winddown \d{4}-\d\d-\d\d( \d\d:\d\d)?", subject)
+        if m:
+            files = stash_show(repo, ref, "--name-only").split()
+            found.append((ref, m.group(0), files))
     return found
 
 
@@ -100,19 +135,29 @@ def short_list(items, n=3):
     return shown + (" +%d more" % (len(items) - n) if len(items) > n else "")
 
 
-def build_tomorrow(files, todos, commits, stashed, label):
-    if files:
-        where = "editing %s, %s." % (
-            short_list(files, 2),
-            'stashed as "%s"' % label if stashed else "left in place",
-        )
+def build_tomorrow(files, todos, commits, stashes, operation):
+    if operation:
+        where = "in the middle of a %s, changes left in place." % operation
+    elif files and not stashes:
+        where = "editing %s, left in place." % short_list(files, 2)
+    elif stashes:
+        _, label, stashed_files = stashes[0]
+        where = 'editing %s, stashed as "%s".' % (short_list(stashed_files, 2), label)
     elif commits:
         where = 'committed "%s".' % commits[0]
     else:
         where = "nothing in progress, clean tree."
     items = []
-    if stashed:
-        items.append("Restore your work: `git stash pop` (%s)" % short_list(files))
+    if operation:
+        items.append("Finish the %s in progress (`git status` shows what's left)" % operation)
+    if stashes:
+        ref, _, stashed_files = stashes[0]
+        item = "Restore your work: `git stash pop --index %s` (%s)" % (
+            ref, short_list(stashed_files))
+        if len(stashes) > 1:
+            item += "; %d older winddown stash%s in `git stash list`" % (
+                len(stashes) - 1, "" if len(stashes) == 2 else "es")
+        items.append(item)
     for f, n, text in todos:
         items.append("%s in %s:%d" % (text, f, n))
     if commits:
@@ -126,21 +171,30 @@ def build_tomorrow(files, todos, commits, stashed, label):
 
 def close_repo(repo, label):
     """Returns True if work was stashed."""
-    files = changed_files(repo)
-    files = [f for f in files if f != "TOMORROW.md"]
+    files = [f for f in changed_files(repo) if f != "TOMORROW.md"]
     todos = todos_in_diff(repo)
     commits = todays_commits(repo)
+    operation = operation_in_progress(repo)
     stashed = False
-    if files:
-        if has_head(repo):
-            r = git(repo, "stash", "push", "-u", "-m", label)
-            stashed = r.returncode == 0 and "No local changes" not in r.stdout
-        else:
-            print("winddown: %s has no commits yet, left changes in place." % repo,
+    if files and operation:
+        print("winddown: %s is in the middle of a %s, left changes in place."
+              % (repo, operation), file=sys.stderr)
+    elif files and not has_head(repo):
+        print("winddown: %s has no commits yet, left changes in place." % repo,
+              file=sys.stderr)
+    elif files:
+        r = git(repo, "stash", "push", "-u", "-m", label)
+        stashed = r.returncode == 0 and "No local changes" not in r.stdout
+        if not stashed:
+            print("winddown: could not stash %s: %s" % (repo, r.stderr.strip()),
                   file=sys.stderr)
+    stashes = winddown_stashes(repo) if has_head(repo) else []
+    if not files and stashes:
+        # Already wound down earlier: rebuild the list from the stash, don't lose it.
+        todos = todos_in_patch(stash_show(repo, stashes[0][0], "-p", "-U0"))
     exclude_tomorrow(repo)
     with open(os.path.join(repo, "TOMORROW.md"), "w") as fh:
-        fh.write(build_tomorrow(files, todos, commits, stashed, label))
+        fh.write(build_tomorrow(files, todos, commits, stashes, operation))
     return stashed
 
 
@@ -214,7 +268,7 @@ def cmd_winddown(args):
     if not re.fullmatch(r"([01]?\d|2[0-3]):[0-5]\d", until):
         print("winddown: --until needs HH:MM, e.g. --until 09:00", file=sys.stderr)
         return 1
-    label = "winddown %s" % dt.date.today().isoformat()
+    label = "winddown %s" % dt.datetime.now().strftime("%Y-%m-%d %H:%M")
     closed = stashed = 0
     for path in repos or ["."]:
         path = os.path.abspath(path)
@@ -269,14 +323,15 @@ def cmd_install_hook():
             print("winddown: %s is not valid JSON, not touching it." % SETTINGS_FILE,
                   file=sys.stderr)
             return 1
-        backup = SETTINGS_FILE + ".winddown.bak"
-        shutil.copy2(SETTINGS_FILE, backup)
     groups = settings.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
     for g in groups:
         for h in g.get("hooks", []):
             if "winddown" in h.get("command", "") and h.get("command", "").endswith(" check"):
                 print("Hook already installed in %s." % SETTINGS_FILE)
                 return 0
+    # Back up only when we're about to change it, so the backup is the pre-winddown file.
+    if os.path.exists(SETTINGS_FILE):
+        shutil.copy2(SETTINGS_FILE, SETTINGS_FILE + ".winddown.bak")
     groups.append({"hooks": [{"type": "command", "command": command}]})
     os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
     tmp = SETTINGS_FILE + ".tmp"
